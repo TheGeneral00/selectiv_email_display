@@ -44,6 +44,25 @@ def select_mailbox(imap, mailbox):
     except Exception as err:
         print(f"Error selecting mailbox '{mailbox}':" err)
 
+def fetch_n_messages(messages, N):
+    '''
+    takes an int as input and returns the given ammount from the top
+    input: messages from mailbox, N number 
+    return: list of N messages 
+    '''
+    for i in range(messages, messages-N, -1):
+        #fetch email by adress
+        res, msg = imap.fetch(str(i), "(RFC822)")
+        for response in msg:
+            #parse bytes email into a message obj
+            msg = email.message_from_bytes(response[1])
+            #decode email subject
+            subject, encoding = decode_header(msg["Subject"])[0]
+            if isinstance(subject, bytes):
+                #if bytes decode to str
+                subject = subject.decode(encoding)
+            From, encoding = decode_header(msg.get('From'))[0]
+
 def select_by_adress(messages, adress):
     '''
     takes an email adress, or multiple, and selectes the messages from that adresses
