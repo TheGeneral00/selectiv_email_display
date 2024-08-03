@@ -6,11 +6,23 @@ from email.header import decode_header
 import webbrowser 
 import os
 #get account credaentials
-from credentials import username, password
+from credentials import username, password, adresses
 #create variable for email provider imap server
 imap_server= 'server_webadress'
 
-def login(username, password, imap_server, ):
+def login(username, password, imap_server):
+    '''
+    Trys to connect to the server with given credentials
+
+    Parameters:
+        - username: A string containing the username for the email account
+        - password: A string containing the password to the account
+        - imap_server: A string containing the server adress
+
+    return:
+        - if loggin is successfull returns imap connection object
+        - else prints out the error from the loggin attempt
+    '''
     try:
         #connect to server via SSL 
         imap=imaplib.IMAP4_SSL(imap_server)
@@ -27,9 +39,15 @@ def login(username, password, imap_server, ):
 # seperated function to change mailbox and return messages if successfull
 def select_mailbox(imap, mailbox):
     '''
-    input: imap from login, mailbox name
-    return: if selection worked returns the messages of the mailbox
-            else returns None and prints error
+    Selects a requested mailbox
+
+    Parameters:
+        - imap: The imap connection object
+        - mailbox: A string of the mailbox name
+
+    return: 
+        - if selection worked returns the number messages of the mailbox
+        - else returns None and prints error
     '''
     try:
         #select where you want to go
@@ -46,9 +64,15 @@ def select_mailbox(imap, mailbox):
 
 def fetch_n_messages(messages, N):
     '''
-    takes an int as input and returns the given ammount from the top
-    input: messages from mailbox, N number 
-    return: list of N messages 
+    Fetches the top n messages from the mailbox
+
+    Parameters:
+        - imap: The imap connection object
+        - messages: The number of messages in the mailbox
+        - N: The number of messages to fetch
+
+    return: 
+        - list of tuples containing the message objects and their senders 
     '''
     for i in range(messages, messages-N, -1):
         #fetch email by adress
@@ -57,16 +81,84 @@ def fetch_n_messages(messages, N):
             #parse bytes email into a message obj
             msg = email.message_from_bytes(response[1])
             #decode email subject
-            subject, encoding = decode_header(msg["Subject"])[0]
-            if isinstance(subject, bytes):
+            From, encoding = decode_header(msg["From"])[0]
+            if isinstance(From, bytes):
                 #if bytes decode to str
-                subject = subject.decode(encoding)
-            From, encoding = decode_header(msg.get('From'))[0]
+                From = From.decode(encoding)
+            if select_by_address(From, adresses):
+                save_to_directory(From, response, email_storage)
 
-def select_by_adress(messages, adress):
+
+def select_by_address(messages, adresses):
     '''
-    takes an email adress, or multiple, and selectes the messages from that adresses
-    input: messages, adress
-    return: messages from adress
-    '''
+    Takes an email adress, or multiple, and selectes the messages from that adresses
     
+    Parameters:
+        - messages: A list of tuples containing the message object and the sender 
+        - adress: A string/A list of strings containing the sender/s adresse/s for which the function sorts
+
+    return:
+        - return: A list of tuples where the senders adress is in the given adress list 
+    '''
+    pass
+
+def write_email_to_file(email_message, path):
+    '''
+    Saves an object to a file in a given directory 
+
+    Parameters:
+        - email_message: The email message object
+        - path: A string of a relativ or absolute path to the wanted directory
+
+    return:
+        - None
+        - prints to console if saving process was successfull or not
+    '''
+    try:
+        #creating absolut path if not given
+        if not os.path.isabs(path):
+            base_dir = os.getcwd()
+            path = os.path.join(base_dir, path)
+        #create path if not existent
+        if not os.path.exists(path):
+            os.makedirs(path)
+        
+        #Decode the email message
+        msg = email.message_from_bytes(email_message)
+        
+        #Get the senders email and decode it if necessary
+        from_header = msg['From']
+        From, encoding = decode_header(from_header)[0]
+        #decode From if of type bytes
+        if isinstance(From, bytes):
+            From = From.decode(encoding)
+
+        #open file to write the email contents to
+        #write the Sender to the first line
+        with open(path, 'w') as file:
+            file.write(f"from: {From}\n")
+            file.write('\n')
+
+            #Write email content to the file
+            if msg.is_multipart():
+                for part in msg.walk():
+                    content_type = part.get_content_type()
+                    content_disposition = str(part.get("Content-Disposition"))
+                    #only get the email body
+                    if "attachment" not in content_disposition and content_type == "text/plain":
+                        body = part.get_payload()
+                        #check for the encoding of the body
+                        charset = part.get_content_charset()
+                        if charset:
+                            body = body.decode(charset)
+                        else: 
+                            body = body.decode('utf-8')
+                        #writing after decoding the body
+                        file.write(body)
+            else:
+                body = msg.get_payload(decode=True).decode(encoding)
+                file.write(body)
+    except Exception as err:
+        print(f"An error occurred while processing the email: {err}")
+
+
