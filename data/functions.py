@@ -29,7 +29,7 @@ def login(username, password, imap_server):
         #login with given credentials
         imap.login(username, password)
         print('Logged in successfully!')
-
+        #return the imap connection object
         return imap
     #if login failed print the error message to console
     except Exception as err:
@@ -73,7 +73,7 @@ def select_mailbox(imap, mailbox):
         else:
             print(f"Failed to select mailbox '{mailbox}'")
     except Exception as err:
-        print(f"Error selecting mailbox '{mailbox}':" err)
+        print(f"Failed to select mailbox with error: {err}")
 
 def fetch_n_messages(messages, N):
     '''
