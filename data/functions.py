@@ -36,6 +36,19 @@ def login(username, password, imap_server):
         print('Failed to login:', err)
         return None
 
+def logout_and_close():
+    '''
+    This function logs out the user and closes the server connection
+
+    Parameters:
+        - imap: The imap connection object
+
+    return:
+        None
+    '''
+    imap.close()
+    imap.logout()
+
 # seperated function to change mailbox and return messages if successfull
 def select_mailbox(imap, mailbox):
     '''
@@ -81,12 +94,12 @@ def fetch_n_messages(messages, N):
             #parse bytes email into a message obj
             msg = email.message_from_bytes(response[1])
             #decode email subject
-            From, encoding = decode_header(msg["From"])[0]
+            From, encoding = decode_header(msg.get("From"))[0]
             if isinstance(From, bytes):
                 #if bytes decode to str
                 From = From.decode(encoding)
             if select_by_address(From, adresses):
-                save_to_directory(From, response, email_storage)
+                write_email_to_file(msg, "email_storage")
 
 
 def select_by_address(messages, adresses):
@@ -113,6 +126,10 @@ def write_email_to_file(email_message, path):
     return:
         - None
         - prints to console if saving process was successfull or not
+
+    To Do: 
+        - make sure files are save in email_storage
+        - if there are attachements save them to a directory named like the email file
     '''
     try:
         #creating absolut path if not given
@@ -125,10 +142,13 @@ def write_email_to_file(email_message, path):
         
         #Decode the email message
         msg = email.message_from_bytes(email_message)
+
+        #decode email subject
+        subject, encoding = decode_header(msg["Subject"])[0]
         
         #Get the senders email and decode it if necessary
-        from_header = msg['From']
-        From, encoding = decode_header(from_header)[0]
+        From, encoding = decode_header(msg["From"])[0]
+        
         #decode From if of type bytes
         if isinstance(From, bytes):
             From = From.decode(encoding)
@@ -144,21 +164,46 @@ def write_email_to_file(email_message, path):
                 for part in msg.walk():
                     content_type = part.get_content_type()
                     content_disposition = str(part.get("Content-Disposition"))
-                    #only get the email body
+                    try:
+                        #get email body
+                        body = part.get_payload(decode=True).decode()
+                    except:
+                        pass
+                    
                     if "attachment" not in content_disposition and content_type == "text/plain":
-                        body = part.get_payload()
-                        #check for the encoding of the body
-                        charset = part.get_content_charset()
-                        if charset:
-                            body = body.decode(charset)
-                        else: 
-                            body = body.decode('utf-8')
-                        #writing after decoding the body
+                        #write email body if its plain text and skip attachments
                         file.write(body)
+
+                    elif "attachment" in content_disposition:
+                        #download attachment
+                        file_name = part.get_filename()
+                        if file_name:
+                            folder_name = clean(subject)
+                            if not os.path.isdir(folder_name):
+                                os.mkdir(filepath)
+                            filepath = os.path.join(folder_name, file_name)
+                            # download and save attachment
+                            open(filepath, "wb").write(part.get_payload(decode=True))
             else:
+                #extract content type
+                content_type = msg.get_content_type()
+                #get email body
                 body = msg.get_payload(decode=True).decode(encoding)
-                file.write(body)
+                if content_type == "text/plain":
+                    #write only the text email Parameters
+                    file.write(body)
     except Exception as err:
         print(f"An error occurred while processing the email: {err}")
 
+def clean(text):
+    '''
+    Helperfunction to clean text
+
+    Parameters:
+        - text: A string containing the "dirty" text
+
+    return:
+        - text: A modified string thats considered "clean"
+    '''
+    return "".join(c if c.isalnum() else "_" for c in text)
 
