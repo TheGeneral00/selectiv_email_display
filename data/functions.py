@@ -2,8 +2,7 @@
 
 import imaplib
 import email
-from email.header import decode_header
-import webbrowser 
+from email.header import decode_header 
 import os
 
 def login(username, password, imap_server):
@@ -67,29 +66,26 @@ def select_mailbox(imap, mailbox):
         status, messages = imap.select(mailbox)
 
         if status == 'OK':
-            print(f"Mailbox'{mailbox}' selected!")
+            print(f"Mailbox '{mailbox}' selected!")
             #if selection successfull return messages
-            return messages
         else:
             print(f"Failed to select mailbox '{mailbox}'")
     except Exception as err:
         print(f"Failed to select mailbox with error: {err}")
 
-def fetch_messages_from_address(imap, messages, N, adresses):
+def fetch_messages_from_address(imap, addresses):
     '''
     Fetches the top n messages from the mailbox
 
     Parameters:
         - imap: The imap connection object
         - messages: The number of messages in the mailbox
-        - N: The number of messages to fetch
-        - addresses: A list of email addresses for that the function should filter
 
     return: 
-        - list of tuples containing the message objects and their senders 
+        - email_ids: A list of email ids  
     '''
     #define serach criteria from given addresses
-    search_criteria = ' OR '.join([f'FROM "{email}"' for email in adresses])
+    search_criteria = ' OR '.join([f'FROM "{email}"' for email in addresses])
     #using search to collect emails fitting the criteria
     status, search_data = imap.search(None, search_criteria)
     email_ids = search_data[0].split()
@@ -112,7 +108,7 @@ def select_first_n_emails_to_write(imap, email_ids, N):
     return:
         - A list containing the first N email ids
     '''
-    for email_id in email_ids[:N-1]:
+    for email_id in email_ids[-N:]:
         write_email_to_file(imap, email_id)
 
         
@@ -131,25 +127,29 @@ def write_email_to_file(imap, email_id):
 
     To Do: 
         - make sure files are save in email_storage
+        - if file exsists replace with new file
         - if there are attachements save them to a directory named like the email file
     '''
     try:
-        path = 'private/email_storage'
+        path = 'email_storage'
         #creating absolut path if not given
         if not os.path.isabs(path):
             base_dir = os.getcwd()
             path = os.path.join(base_dir, path)
+
         #create path if not existent
+        print("Checkpoint 1")
         if not os.path.exists(path):
             os.makedirs(path)
-        
+        print("Checkpoint 2")
         #Decode the email message
         status, data = imap.fetch(email_id, '(RFC822)')
+
         #Handle cases where no content is fetched 
         if status != 'OK':
             print("Failed to fetch email")
             return None
-        
+        print("Checkpoint 3")
         #get raw email
         raw_email = data[0][1]
         #parse raw email
@@ -157,53 +157,22 @@ def write_email_to_file(imap, email_id):
 
         #decode email subject
         subject, encoding = decode_header(msg["Subject"])[0]
+        if isinstance(subject, bytes):
+            subject = subject.decode(encoding)
+        print("Checkpoint 4")
+        #create file name as clean subject
+        file_name = clean(subject)+ ".eml"
         
-        #Get the senders email and decode it if necessary
-        From, encoding = decode_header(msg["From"])[0]
-        
-        #decode From if of type bytes
-        if isinstance(From, bytes):
-            From = From.decode(encoding)
-
+        #create complete file path
+        path = os.path.join(path, file_name)
+        print("Checkpoint 5")
         #open file to write the email contents to
         #write the Sender to the first line
-        with open(path, 'w') as file:
-            file.write(f"from: {From}\n")
-            file.write('\n')
-
-            #Write email content to the file
-            if msg.is_multipart():
-                for part in msg.walk():
-                    content_type = part.get_content_type()
-                    content_disposition = str(part.get("Content-Disposition"))
-                    try:
-                        #get email body
-                        body = part.get_payload(decode=True).decode()
-                    except:
-                        pass
-                    
-                    if "attachment" not in content_disposition and content_type == "text/plain":
-                        #write email body if its plain text and skip attachments
-                        file.write(body)
-
-                    elif "attachment" in content_disposition:
-                        #download attachment
-                        file_name = part.get_filename()
-                        if file_name:
-                            folder_name = clean(subject)
-                            if not os.path.isdir(folder_name):
-                                os.mkdir(filepath)
-                            filepath = os.path.join(folder_name, file_name)
-                            # download and save attachment
-                            open(filepath, "wb").write(part.get_payload(decode=True))
-            else:
-                #extract content type
-                content_type = msg.get_content_type()
-                #get email body
-                body = msg.get_payload(decode=True).decode(encoding)
-                if content_type == "text/plain":
-                    #write only the text email Parameters
-                    file.write(body)
+        with open(path, 'wb') as file:
+            print(f"File writen to {path}")
+            file.write(raw_email)
+    
+    #give feedback if function call failed
     except Exception as err:
         print(f"An error occurred while processing the email: {err}")
 
