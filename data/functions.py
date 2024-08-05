@@ -5,10 +5,6 @@ import email
 from email.header import decode_header
 import webbrowser 
 import os
-#get account credaentials
-from credentials import username, password, adresses
-#create variable for email provider imap server
-imap_server= 'server_webadress'
 
 def login(username, password, imap_server):
     '''
@@ -36,7 +32,7 @@ def login(username, password, imap_server):
         print('Failed to login:', err)
         return None
 
-def logout_and_close():
+def logout_and_close(imap):
     '''
     This function logs out the user and closes the server connection
 
@@ -46,13 +42,17 @@ def logout_and_close():
     return:
         None
     '''
-    imap.close()
-    imap.logout()
+    try:
+        if imap.select():
+            imap.close()
+        imap.logout()
+        print("Logged out successfully!")
+    except Exception as err:
+        print(f"Failed to logout with error: {err}")
 
-# seperated function to change mailbox and return messages if successfull
 def select_mailbox(imap, mailbox):
     '''
-    Selects a requested mailbox
+    Selects a requested mailbox, based on imap.select(), but offers some more feedback
 
     Parameters:
         - imap: The imap connection object
@@ -75,7 +75,7 @@ def select_mailbox(imap, mailbox):
     except Exception as err:
         print(f"Failed to select mailbox with error: {err}")
 
-def fetch_n_messages(messages, N):
+def fetch_messages_from_address(imap, messages, N, adresses):
     '''
     Fetches the top n messages from the mailbox
 
@@ -83,45 +83,47 @@ def fetch_n_messages(messages, N):
         - imap: The imap connection object
         - messages: The number of messages in the mailbox
         - N: The number of messages to fetch
+        - addresses: A list of email addresses for that the function should filter
 
     return: 
         - list of tuples containing the message objects and their senders 
     '''
-    for i in range(messages, messages-N, -1):
-        #fetch email by adress
-        res, msg = imap.fetch(str(i), "(RFC822)")
-        for response in msg:
-            #parse bytes email into a message obj
-            msg = email.message_from_bytes(response[1])
-            #decode email subject
-            From, encoding = decode_header(msg.get("From"))[0]
-            if isinstance(From, bytes):
-                #if bytes decode to str
-                From = From.decode(encoding)
-            if select_by_address(From, adresses):
-                write_email_to_file(msg, "email_storage")
+    #define serach criteria from given addresses
+    search_criteria = ' OR '.join([f'FROM "{email}"' for email in adresses])
+    #using search to collect emails fitting the criteria
+    status, search_data = imap.search(None, search_criteria)
+    email_ids = search_data[0].split()
+    #give feedback if no emails matching the criteria 
+    if not email_ids:
+        print("No emails found from specified addresses.")
+        exit()
+    #give feedback on found emails
+    print(f"Found {len(email_ids)} emails from specified addresses.")
+    return email_ids
 
-
-def select_by_address(messages, adresses):
+def select_first_n_emails_to_write(imap, email_ids, N):
     '''
-    Takes an email adress, or multiple, and selectes the messages from that adresses
+    The function selects the first N emails from the emails ids and fetches the contents to return them.
     
     Parameters:
-        - messages: A list of tuples containing the message object and the sender 
-        - adress: A string/A list of strings containing the sender/s adresse/s for which the function sorts
+        - email_ids: A list of email ids from fetch_messages_from_address()
+        - N: An integer to specify the amount of messages fetch_messages_from_address
 
     return:
-        - return: A list of tuples where the senders adress is in the given adress list 
+        - A list containing the first N email ids
     '''
-    pass
+    for email_id in email_ids[:N-1]:
+        write_email_to_file(imap, email_id)
 
-def write_email_to_file(email_message, path):
+        
+
+def write_email_to_file(imap, email_id):
     '''
     Saves an object to a file in a given directory 
 
     Parameters:
-        - email_message: The email message object
-        - path: A string of a relativ or absolute path to the wanted directory
+        - imap: The imap connection object
+        - email_id: An email id 
 
     return:
         - None
@@ -132,6 +134,7 @@ def write_email_to_file(email_message, path):
         - if there are attachements save them to a directory named like the email file
     '''
     try:
+        path = 'private/email_storage'
         #creating absolut path if not given
         if not os.path.isabs(path):
             base_dir = os.getcwd()
@@ -141,7 +144,16 @@ def write_email_to_file(email_message, path):
             os.makedirs(path)
         
         #Decode the email message
-        msg = email.message_from_bytes(email_message)
+        status, data = imap.fetch(email_id, '(RFC822)')
+        #Handle cases where no content is fetched 
+        if status != 'OK':
+            print("Failed to fetch email")
+            return None
+        
+        #get raw email
+        raw_email = data[0][1]
+        #parse raw email
+        msg = email.message_from_bytes(raw_email)
 
         #decode email subject
         subject, encoding = decode_header(msg["Subject"])[0]
