@@ -1,3 +1,4 @@
 data/credentials.py
 data/__pycache__
 email_storage
+venv
