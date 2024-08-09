@@ -258,3 +258,20 @@ def save_html_content(directory_path, html_content, From):
 
     with open(html_path, 'w', encoding='utf-8') as html_file:
         html_file.write(html_content)
+
+def load_emails_from_storage(directory_path):
+    '''
+    Load email contents and display names (like filenames) from .eml files.
+    
+    Parameters:
+        - directory_path: Path where .eml files are stored.
+
+    Returns:
+        - List of tuples (filename, email content).
+    '''
+    emails = []
+    for filename in os.listdir(directory_path):
+        if filename.endswith('.html'):
+            with open(os.path.join(directory_path, filename), 'r') as file:
+                emails.append((filename, file.read()))
+    return emails
