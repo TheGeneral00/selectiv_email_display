@@ -31,7 +31,7 @@ class NotebookApp(QWidget):
         self.setLayout(layout)
             
 
-if __name__ == '__main__':
+def start_app():
     app = QApplication(sys.argv)
 
     # List of HTML content for each email
