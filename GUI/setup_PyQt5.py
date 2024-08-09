@@ -1,5 +1,5 @@
 import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow
+from PyQt5.QtWidgets import QApplication, QTabWidget, QVBoxLayout, QWidget
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 import os
 
@@ -20,27 +20,36 @@ def load_emails_from_storage(directory_path):
                 emails.append((filename, file.read()))
     return emails
 
-class EmailWindow(QMainWindow):
-    def __init__(self, email_html):
-        super().__init__()
-        self.browser = QWebEngineView()
-        self.browser.setHtml(email_html)
-        self.setCentralWidget(self.browser)
-        self.setWindowTitle("Email Viewer")
-        self.show()
-
-class App(QApplication):
+class NotebookApp(QWidget):
     def __init__(self, emails):
-        super().__init__(sys.argv)
-        self.email_windows = [] 
-        for email_html in emails:
-            window = EmailWindow(email_html[1])
-            window.setWindowTitle(email_html[0])
-            self.email_windows.append(window)
+        super().__init__()
+        self.setWindowTitle('Selectiv Email Display')
+
+        layout = QVBoxLayout(self)
+
+        tab_widget = QTabWidget()
+
+        for filename, email_html in emails:
+            tab = QWidget()
+            tab_layout = QVBoxLayout()
+            
+            web_view = QWebEngineView()
+            web_view.setHtml(email_html)
+
+            tab_layout.addWidget(web_view)
+            tab.setLayout(tab_layout)
+            tab_widget.addTab(tab, filename)
+
+        layout.addWidget(tab_widget)
+        self.setLayout(layout)
+            
 
 if __name__ == '__main__':
-    # List of HTML content for each email
-    email_html_contents = load_emails_from_storage('email_storage')
-    app = App(email_html_contents)
-    sys.exit(app.exec_())
+    app = QApplication(sys.argv)
 
+    # List of HTML content for each email
+    email_htmls = load_emails_from_storage('email_storage')
+    notebook_app = NotebookApp(email_htmls)
+    notebook_app.show()
+    
+    sys.exit(app.exec_())
